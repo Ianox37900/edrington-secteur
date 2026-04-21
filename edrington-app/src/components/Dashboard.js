@@ -5,7 +5,6 @@ export default function Dashboard({ etablissements }) {
   const total = etablissements.length
   const clients = etablissements.filter(e => e.statut === 'Client actif').length
   const prospectsChauds = etablissements.filter(e => e.statut === 'Prospect chaud').length
-
   const totalVolume = etablissements.reduce((sum, e) =>
     sum + (e.produits_references?.reduce((s, p) => s + (p.volume_mensuel || 0), 0) || 0), 0)
 
