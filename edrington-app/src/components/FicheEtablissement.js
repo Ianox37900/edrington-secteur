@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { supabase, PRODUITS, RESULTATS, STATUT_COLORS } from '../supabase'
 import { Edit2, Trash2, Plus, Phone, Mail, Globe, MapPin, User, Calendar, Package, FileText, ChevronDown, ChevronUp, Star } from 'lucide-react'
 
@@ -55,17 +55,12 @@ function PriorityScore({ potentiel, statut }) {
 }
 
 function PhotoHeader({ etab, color }) {
-  const [imgError, setImgError] = useState(false)
-  const [imgLoaded, setImgLoaded] = useState(false)
 
   // Google Places photo via Mapbox geocoding ou placeholder basé sur le type
   const typeEmojis = { 'Bar': '🍸', 'Restaurant': '🍽️', 'Caviste': '🍷', 'Hotel': '🏨', 'Club': '🎵', 'Autre': '📍' }
   const emoji = typeEmojis[etab.type] || '📍'
 
   // Photo via Google Static Map centrée sur l'adresse si coordonnées disponibles
-  const mapPhotoUrl = etab.latitude && etab.longitude
-    ? `https://maps.googleapis.com/maps/api/staticmap?center=${etab.latitude},${etab.longitude}&zoom=17&size=400x140&maptype=roadmap&markers=color:red%7C${etab.latitude},${etab.longitude}&style=feature:all|element:labels|visibility:off&key=NOKEY`
-    : null
 
   return (
     <div style={{ margin: '0 -20px', marginBottom: 16, position: 'relative', height: 120, overflow: 'hidden', background: 'linear-gradient(135deg, #1a1d2e, #0f1117)', borderBottom: `3px solid ${color}` }}>
