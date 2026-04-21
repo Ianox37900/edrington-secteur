@@ -1,6 +1,100 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase, PRODUITS, RESULTATS, STATUT_COLORS } from '../supabase'
-import { Edit2, Trash2, Plus, Phone, Mail, Globe, MapPin, User, Calendar, Package, FileText, ChevronDown, ChevronUp } from 'lucide-react'
+import { Edit2, Trash2, Plus, Phone, Mail, Globe, MapPin, User, Calendar, Package, FileText, ChevronDown, ChevronUp, Star } from 'lucide-react'
+
+const POTENTIEL_CONFIG = {
+  'Très fort': { stars: 4, color: '#22c55e', label: 'Très fort' },
+  'Fort':      { stars: 3, color: '#c9a96e', label: 'Fort' },
+  'Moyen':     { stars: 2, color: '#60a5fa', label: 'Moyen' },
+  'Faible':    { stars: 1, color: '#9ca3af', label: 'Faible' },
+}
+
+function PriorityScore({ potentiel, statut }) {
+  const cfg = POTENTIEL_CONFIG[potentiel] || POTENTIEL_CONFIG['Moyen']
+  const statutBonus = statut === 'Client actif' ? 1 : statut === 'Prospect chaud' ? 0.5 : 0
+  const score = Math.min(Math.round((cfg.stars / 4) * 100 + statutBonus * 10), 100)
+
+  return (
+    <div style={{ background: '#0f1117', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#c9a96e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+        Score de priorité
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Jauge circulaire */}
+        <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+          <svg width="56" height="56" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="28" cy="28" r="22" fill="none" stroke="#2d3148" strokeWidth="5" />
+            <circle cx="28" cy="28" r="22" fill="none" stroke={cfg.color} strokeWidth="5"
+              strokeDasharray={`${2 * Math.PI * 22}`}
+              strokeDashoffset={`${2 * Math.PI * 22 * (1 - score / 100)}`}
+              strokeLinecap="round" />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: cfg.color }}>
+            {score}
+          </div>
+        </div>
+        <div style={{ flex: 1 }}>
+          {/* Étoiles */}
+          <div style={{ display: 'flex', gap: 3, marginBottom: 4 }}>
+            {[1,2,3,4].map(i => (
+              <Star key={i} size={14} fill={i <= cfg.stars ? cfg.color : 'none'} color={i <= cfg.stars ? cfg.color : '#2d3148'} />
+            ))}
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: cfg.color }}>{cfg.label}</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+            {statut === 'Client actif' ? '+10 pts client actif' : statut === 'Prospect chaud' ? '+5 pts prospect chaud' : 'Aucun bonus statut'}
+          </div>
+        </div>
+      </div>
+      {/* Barre de progression */}
+      <div style={{ marginTop: 10, height: 5, background: '#2d3148', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${score}%`, height: '100%', background: `linear-gradient(90deg, ${cfg.color}88, ${cfg.color})`, borderRadius: 3, transition: 'width 0.8s ease' }} />
+      </div>
+    </div>
+  )
+}
+
+function PhotoHeader({ etab, color }) {
+  const [imgError, setImgError] = useState(false)
+  const [imgLoaded, setImgLoaded] = useState(false)
+
+  // Google Places photo via Mapbox geocoding ou placeholder basé sur le type
+  const typeEmojis = { 'Bar': '🍸', 'Restaurant': '🍽️', 'Caviste': '🍷', 'Hotel': '🏨', 'Club': '🎵', 'Autre': '📍' }
+  const emoji = typeEmojis[etab.type] || '📍'
+
+  // Photo via Google Static Map centrée sur l'adresse si coordonnées disponibles
+  const mapPhotoUrl = etab.latitude && etab.longitude
+    ? `https://maps.googleapis.com/maps/api/staticmap?center=${etab.latitude},${etab.longitude}&zoom=17&size=400x140&maptype=roadmap&markers=color:red%7C${etab.latitude},${etab.longitude}&style=feature:all|element:labels|visibility:off&key=NOKEY`
+    : null
+
+  return (
+    <div style={{ margin: '0 -20px', marginBottom: 16, position: 'relative', height: 120, overflow: 'hidden', background: 'linear-gradient(135deg, #1a1d2e, #0f1117)', borderBottom: `3px solid ${color}` }}>
+      {/* Fond avec dégradé et emoji géant */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: 64, opacity: 0.15 }}>{emoji}</div>
+      </div>
+      {/* Dégradé coloré selon statut */}
+      <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${color}15, ${color}05)` }} />
+      {/* Grille de points décorative */}
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+      {/* Infos en overlay */}
+      <div style={{ position: 'absolute', bottom: 12, left: 20, right: 20 }}>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>
+          {emoji} {etab.type} · {etab.categorie} · {etab.arrondissement}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` }} />
+          <span style={{ fontSize: 11, color: color, fontWeight: 700 }}>{etab.statut}</span>
+          {etab.telephone && (
+            <a href={`tel:${etab.telephone}`} style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.1)', borderRadius: 6, padding: '4px 10px', color: '#f1f5f9', fontSize: 11, textDecoration: 'none', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              📞 Appeler
+            </a>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function FicheEtablissement({ etab, onEdit, onDelete, onRefresh }) {
   const [showVisiteForm, setShowVisiteForm] = useState(false)
@@ -47,57 +141,82 @@ export default function FicheEtablissement({ etab, onEdit, onDelete, onRefresh }
 
   return (
     <div style={{ padding: '0 20px 24px', fontSize: 13 }}>
-      {/* Header */}
-      <div style={{ borderBottom: '1px solid #2d3148', paddingBottom: 16, marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#f1f5f9' }}>{etab.nom}</h2>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{etab.type} · {etab.categorie}</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onEdit} style={{ background: '#2d3148', border: 'none', borderRadius: 6, padding: '6px 10px', color: '#94a3b8', cursor: 'pointer' }}><Edit2 size={14} /></button>
-            <button onClick={onDelete} style={{ background: '#2d1a1a', border: 'none', borderRadius: 6, padding: '6px 10px', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={14} /></button>
-          </div>
+
+      {/* Photo / Header visuel */}
+      <PhotoHeader etab={etab} color={color} />
+
+      {/* Titre + Actions */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.2 }}>{etab.nom}</h2>
         </div>
-        <span style={{ background: color, color: 'white', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>{etab.statut}</span>
-        {etab.potentiel && <span style={{ background: '#1e2340', color: '#c9a96e', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>Potentiel : {etab.potentiel}</span>}
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button onClick={onEdit} style={{ background: '#2d3148', border: 'none', borderRadius: 6, padding: '6px 10px', color: '#94a3b8', cursor: 'pointer' }}><Edit2 size={14} /></button>
+          <button onClick={onDelete} style={{ background: '#2d1a1a', border: 'none', borderRadius: 6, padding: '6px 10px', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={14} /></button>
+        </div>
       </div>
 
+      {/* Score de priorité */}
+      <PriorityScore potentiel={etab.potentiel} statut={etab.statut} />
+
       {/* Infos contact */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 18 }}>
         {sectionTitle('Contact', <MapPin size={12} />)}
         <div style={{ display: 'grid', gap: 6 }}>
-          {etab.adresse && <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#94a3b8' }}><MapPin size={13} style={{ flexShrink: 0 }} />{etab.adresse}{etab.arrondissement ? ` · ${etab.arrondissement}` : ''}</div>}
-          {etab.telephone && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Phone size={13} style={{ flexShrink: 0, color: '#c9a96e' }} /><a href={`tel:${etab.telephone}`} style={{ color: '#60a5fa', textDecoration: 'none' }}>{etab.telephone}</a></div>}
-          {etab.email && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Mail size={13} style={{ flexShrink: 0, color: '#c9a96e' }} /><a href={`mailto:${etab.email}`} style={{ color: '#60a5fa', textDecoration: 'none' }}>{etab.email}</a></div>}
-          {etab.site_web && <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Globe size={13} style={{ flexShrink: 0, color: '#c9a96e' }} /><a href={etab.site_web} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'none' }}>{etab.site_web}</a></div>}
+          {etab.adresse && (
+            <a href={`https://maps.google.com/?q=${encodeURIComponent(etab.adresse + ' Paris')}`} target="_blank" rel="noreferrer"
+              style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#60a5fa', textDecoration: 'none', fontSize: 12 }}>
+              <MapPin size={13} style={{ flexShrink: 0, color: '#c9a96e' }} />
+              {etab.adresse}{etab.arrondissement ? ` · ${etab.arrondissement}` : ''}
+            </a>
+          )}
+          {etab.telephone && (
+            <a href={`tel:${etab.telephone}`} style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#60a5fa', textDecoration: 'none', fontSize: 12 }}>
+              <Phone size={13} style={{ flexShrink: 0, color: '#c9a96e' }} />
+              {etab.telephone}
+            </a>
+          )}
+          {etab.email && (
+            <a href={`mailto:${etab.email}`} style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#60a5fa', textDecoration: 'none', fontSize: 12 }}>
+              <Mail size={13} style={{ flexShrink: 0, color: '#c9a96e' }} />
+              {etab.email}
+            </a>
+          )}
+          {etab.site_web && (
+            <a href={etab.site_web} target="_blank" rel="noreferrer" style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#60a5fa', textDecoration: 'none', fontSize: 12 }}>
+              <Globe size={13} style={{ flexShrink: 0, color: '#c9a96e' }} />
+              {etab.site_web.replace('https://', '').replace('http://', '')}
+            </a>
+          )}
         </div>
       </div>
 
       {/* Interlocuteur */}
       {etab.interlocuteur_nom && (
-        <div style={{ marginBottom: 20, background: '#0f1117', borderRadius: 8, padding: 12 }}>
+        <div style={{ marginBottom: 18, background: '#0f1117', borderRadius: 8, padding: 12 }}>
           {sectionTitle('Interlocuteur', <User size={12} />)}
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>{etab.interlocuteur_nom} {etab.interlocuteur_poste ? `· ${etab.interlocuteur_poste}` : ''}</div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            {etab.interlocuteur_tel && <a href={`tel:${etab.interlocuteur_tel}`} style={{ color: '#60a5fa', fontSize: 12, textDecoration: 'none' }}>{etab.interlocuteur_tel}</a>}
-            {etab.interlocuteur_email && <a href={`mailto:${etab.interlocuteur_email}`} style={{ color: '#60a5fa', fontSize: 12, textDecoration: 'none' }}>{etab.interlocuteur_email}</a>}
+          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{etab.interlocuteur_nom}
+            {etab.interlocuteur_poste && <span style={{ fontWeight: 400, color: '#64748b', fontSize: 12 }}> · {etab.interlocuteur_poste}</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {etab.interlocuteur_tel && <a href={`tel:${etab.interlocuteur_tel}`} style={{ color: '#60a5fa', fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}><Phone size={11} />{etab.interlocuteur_tel}</a>}
+            {etab.interlocuteur_email && <a href={`mailto:${etab.interlocuteur_email}`} style={{ color: '#60a5fa', fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={11} />{etab.interlocuteur_email}</a>}
           </div>
         </div>
       )}
 
       {/* Notes */}
       {etab.notes && (
-        <div style={{ marginBottom: 20, background: '#0f1117', borderRadius: 8, padding: 12 }}>
+        <div style={{ marginBottom: 18, background: '#0f1117', borderRadius: 8, padding: 12, borderLeft: '3px solid #c9a96e' }}>
           {sectionTitle('Notes', <FileText size={12} />)}
-          <div style={{ color: '#94a3b8', lineHeight: 1.5 }}>{etab.notes}</div>
+          <div style={{ color: '#94a3b8', lineHeight: 1.6, fontSize: 12 }}>{etab.notes}</div>
         </div>
       )}
 
       {/* Produits */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          {sectionTitle(`Produits référencés (${totalVolume} btl/mois)`, <Package size={12} />)}
+          {sectionTitle(`Produits (${totalVolume} btl/mois)`, <Package size={12} />)}
           <button onClick={() => setShowProduitForm(!showProduitForm)} style={{ background: '#1e2340', border: '1px solid #2d3148', borderRadius: 6, padding: '4px 10px', color: '#c9a96e', cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Plus size={12} /> Ajouter
           </button>
@@ -117,7 +236,7 @@ export default function FicheEtablissement({ etab, onEdit, onDelete, onRefresh }
               <div><label style={labelStyle}>Date référencement</label><input type="date" value={produit.date_referencement} onChange={e => setProduit(p => ({ ...p, date_referencement: e.target.value }))} style={inputStyle} /></div>
               <div><label style={labelStyle}>Notes</label><input value={produit.notes} onChange={e => setProduit(p => ({ ...p, notes: e.target.value }))} style={inputStyle} /></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={saveProduit} style={{ flex: 1, background: 'linear-gradient(135deg, #c9a96e, #8b6914)', border: 'none', borderRadius: 6, padding: '8px', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>Enregistrer</button>
+                <button onClick={saveProduit} style={{ flex: 1, background: 'linear-gradient(135deg,#c9a96e,#8b6914)', border: 'none', borderRadius: 6, padding: 8, color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Enregistrer</button>
                 <button onClick={() => setShowProduitForm(false)} style={{ background: '#2d3148', border: 'none', borderRadius: 6, padding: '8px 12px', color: '#94a3b8', cursor: 'pointer', fontSize: 12 }}>Annuler</button>
               </div>
             </div>
@@ -129,7 +248,7 @@ export default function FicheEtablissement({ etab, onEdit, onDelete, onRefresh }
         {etab.produits_references?.map(p => (
           <div key={p.id} style={{ background: '#0f1117', borderRadius: 8, padding: '10px 12px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 12, color: '#c9a96e' }}>{p.produit}</div>
+              <div style={{ fontWeight: 700, fontSize: 12, color: '#c9a96e' }}>{p.produit}</div>
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
                 {p.volume_mensuel > 0 && `${p.volume_mensuel} btl/mois`}
                 {p.prix_vente && ` · ${p.prix_vente}€`}
@@ -152,7 +271,6 @@ export default function FicheEtablissement({ etab, onEdit, onDelete, onRefresh }
             <Plus size={12} /> Nouvelle visite
           </button>
         </div>
-
         {showVisiteForm && (
           <div style={{ background: '#0f1117', borderRadius: 8, padding: 12, marginBottom: 10 }}>
             <div style={{ display: 'grid', gap: 8 }}>
@@ -168,22 +286,21 @@ export default function FicheEtablissement({ etab, onEdit, onDelete, onRefresh }
               <div><label style={labelStyle}>Compte-rendu</label><textarea value={visite.compte_rendu} onChange={e => setVisite(v => ({ ...v, compte_rendu: e.target.value }))} style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} placeholder="Notes de visite..." /></div>
               <div><label style={labelStyle}>Prochaine visite</label><input type="date" value={visite.prochaine_visite} onChange={e => setVisite(v => ({ ...v, prochaine_visite: e.target.value }))} style={inputStyle} /></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={saveVisite} style={{ flex: 1, background: 'linear-gradient(135deg, #c9a96e, #8b6914)', border: 'none', borderRadius: 6, padding: '8px', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>Enregistrer</button>
+                <button onClick={saveVisite} style={{ flex: 1, background: 'linear-gradient(135deg,#c9a96e,#8b6914)', border: 'none', borderRadius: 6, padding: 8, color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Enregistrer</button>
                 <button onClick={() => setShowVisiteForm(false)} style={{ background: '#2d3148', border: 'none', borderRadius: 6, padding: '8px 12px', color: '#94a3b8', cursor: 'pointer', fontSize: 12 }}>Annuler</button>
               </div>
             </div>
           </div>
         )}
-
         {showVisites && visitesSorted.map(v => {
           const resultColors = { 'Gagné': '#22c55e', 'En cours': '#f97316', 'Refus': '#ef4444', 'Relance': '#60a5fa' }
           return (
             <div key={v.id} style={{ background: '#0f1117', borderRadius: 8, padding: '10px 12px', marginBottom: 6, borderLeft: `3px solid ${resultColors[v.resultat] || '#64748b'}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600, fontSize: 12 }}>{new Date(v.date_visite).toLocaleDateString('fr-FR')}</span>
-                    <span style={{ background: resultColors[v.resultat], color: 'white', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600 }}>{v.resultat}</span>
+                    <span style={{ fontWeight: 700, fontSize: 12 }}>{new Date(v.date_visite).toLocaleDateString('fr-FR')}</span>
+                    <span style={{ background: resultColors[v.resultat], color: 'white', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{v.resultat}</span>
                   </div>
                   {v.objectif && <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>🎯 {v.objectif}</div>}
                   {v.compte_rendu && <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.4 }}>{v.compte_rendu}</div>}
